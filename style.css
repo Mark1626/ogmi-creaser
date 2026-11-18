@@ -1,0 +1,252 @@
+/* Layout and fixes layered on top of the vendored lib/xp.css/XP.css */
+
+/* XP.css and the rules below set display on some elements; make sure the
+   hidden attribute (used to show/hide control groups) always wins */
+[hidden] {
+    display: none !important;
+}
+
+body {
+    margin: 0;
+    padding: 8px;
+    background: darkgray;
+}
+
+.title-bar-text {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.title-bar-text img {
+    width: 16px;
+    height: 16px;
+}
+
+/* Control groups: one XP group box per group, wrapping when narrow */
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.controls .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+}
+
+/* XP.css stacks consecutive field rows (margin-top on each following one);
+   here they sit side by side in a row, so drop that margin */
+.controls .field-row {
+    margin: 0;
+}
+
+/* Sub-groups that are shown/hidden together but lay out as part of the row */
+.controls .group {
+    display: contents;
+}
+
+/* XP.css gives every button min-width: 75px; let small ones shrink */
+button.compact {
+    min-width: 23px;
+    padding: 0 4px;
+}
+
+/* XP.css styles text inputs but not number inputs; match the text look */
+input[type=number] {
+    padding: 3px 4px;
+    border: 1px solid #7f9db9;
+    background-color: #fff;
+    box-sizing: border-box;
+    border-radius: 0;
+    height: 21px;
+    width: 5em;
+}
+
+#example {
+    width: 160px;
+}
+
+/* Crease pattern editor */
+#edit_controls input[type=radio] + label {
+    margin-right: 10px; /* XP draws each radio left of its label: keep the */
+}                       /* next option's circle off this label's text */
+
+#edit_title {
+    width: 16em;
+}
+
+#edit_width, #edit_height, #paper_width, #paper_height {
+    width: 4.5em;
+}
+
+/* Drawing panels, with the editor's Help panel on the right */
+.workspace {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.workspace .panels {
+    flex: 1;
+    min-width: 0;       /* let the panels shrink beside the help */
+}
+
+#help_panel {
+    flex: 0 0 260px;
+    box-sizing: border-box;
+}
+
+#help_table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "Pixelated MS Sans Serif", Arial;
+    font-size: 11px;
+}
+
+#help_table th {        /* group headings, like XP's legends */
+    text-align: left;
+    font-weight: normal;
+    color: #0046d5;
+    padding: 8px 0 2px;
+    border-bottom: 1px solid #d0d0bf;
+}
+
+#help_table tr:first-child th {
+    padding-top: 0;
+}
+
+#help_table td {
+    padding: 3px 6px 0 0;
+    vertical-align: top;
+}
+
+#help_table td:first-child {
+    width: 1%;              /* as narrow as its keys allow */
+}
+
+#help_table td.keys {
+    white-space: nowrap;
+}
+
+#help_table .combo {    /* alternative shortcuts, one per line */
+    display: block;
+}
+
+#help_table .combo + .combo {
+    margin-top: 2px;
+}
+
+#help_table kbd {       /* keycaps */
+    display: inline-block;
+    min-width: 1.2em;
+    margin-right: 1px;
+    padding: 0 3px;
+    text-align: center;
+    font: inherit;
+    background: #fff;
+    border: 1px solid #a0a0a0;
+    border-bottom-width: 2px;
+    border-radius: 3px;
+}
+
+/* Paper dialog: a native <dialog> dressed as an XP window */
+dialog.window {
+    padding: 0;
+    border: none;
+    width: 320px;
+}
+
+dialog.window::backdrop {
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.dialog_buttons {
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
+#edit_reflect_x, #edit_reflect_y, #edit_rotate_ccw, #edit_rotate_cw,
+#edit_zoom_out, #edit_zoom_in {
+    font: 15px Arial, sans-serif;   /* the pixel font has no arrow glyphs */
+}
+
+#edit_zoom_reset {
+    min-width: 4.5em;   /* room for any zoom level, so the toolbar holds still */
+}
+
+.swatch {               /* crease colour sample; colour set from GUI.COLORS */
+    display: inline-block;
+    width: 14px;
+    height: 0;
+    margin-right: 4px;
+}
+
+#flat.editing {
+    touch-action: none; /* pointer input draws instead of scrolling */
+}
+
+/* While editing, the folded panels only show the last fold: their click
+   handlers expect the analysis view in the left panel */
+#main.editing #cell, #main.editing #fold {
+    pointer-events: none;
+}
+
+#flat.edit_draw {
+    cursor: crosshair;
+}
+
+#flat.edit_modify, #flat.edit_erase {
+    cursor: pointer;
+}
+
+#flat.edit_move {
+    cursor: move;
+}
+
+/* Zoomed-in overview (EDIT.draw_minimap): the pointer passes through to the
+   crease pattern, and it fades while the pointer is over it */
+#edit_minimap {
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+#edit_minimap.faded {
+    opacity: 0.2;
+}
+
+#flat.edit_pan {        /* Space held: dragging pans (after the tool cursors) */
+    cursor: grab;
+}
+
+#flat.edit_panning {
+    cursor: grabbing;
+}
+
+#console {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    font-family: monospace;
+    font-size: 12px;
+    resize: vertical;
+}
+
+/* Status bar: fixed-size fields for credits and links, wrapping onto a
+   second line when the window is too narrow for all of them */
+.status-bar {
+    flex-wrap: wrap;
+}
+
+.status-bar-field.fixed {
+    flex-grow: 0;
+    white-space: nowrap;
+}
+
+.status-bar-field a + a {
+    margin-left: 8px;
+}

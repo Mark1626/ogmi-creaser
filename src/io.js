@@ -8,7 +8,7 @@ export const IO = {    // INPUT-OUTPUT
         const {name, V, Vf, EV, EA, FV, FO} = FOLD;
         FOLD = {
             file_spec: 1.1,
-            file_creator: "flat-folder",
+            file_creator: "ogmi-creaser",
             file_title: `${name}_cp`,
             file_classes: ["singleModel"],
             vertices_coords:  V,
@@ -37,15 +37,28 @@ export const IO = {    // INPUT-OUTPUT
             ["img", "svg"],
             ["log", "txt"]
         ]) {
-            const link = document.createElement("a");
-            const button = document.createElement("input");
-            ex.appendChild(link);
-            link.appendChild(button);
-            link.setAttribute("download", `${name}_${type}.${ext}`);
-            link.setAttribute("href", window.URL.createObjectURL(data[type]));
-            button.setAttribute("type", "button");
-            button.setAttribute("value", type);
+            IO.download_button(ex, type, data[type], `${name}_${type}.${ext}`);
         }
+    },
+    download_button: (parent, label, blob, file_name) => {
+        // XP.css only styles <button>, so use a button that clicks a
+        // temporary download link instead of a button nested in a link
+        const button = document.createElement("button");
+        button.textContent = label;
+        button.onclick = () => IO.download(blob, file_name);
+        parent.appendChild(button);
+        return button;
+    },
+    download: (blob, file_name) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("download", file_name);
+        link.setAttribute("href", url);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        // free the blob later; revoking right away can cancel the download
+        setTimeout(() => window.URL.revokeObjectURL(url), 10000);
     },
     OPX_2_L: (doc) => {
         const parser = new DOMParser();

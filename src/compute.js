@@ -29,7 +29,13 @@ const actions = {
         NOTE.start("*** Beginning import ***");
         const [V, VV, EV, EA, EF, FV, FE] =
             IO.doc_type_side_2_V_VV_EV_EA_EF_FV_FE(doc, type, side);
-        if (V == undefined) { return; }
+        if ((V != undefined) && (FV.length == 0)) {
+            NOTE.time("ERROR: no faces found (is there a closed boundary?)");
+        }
+        if ((V == undefined) || (FV.length == 0)) { // import failed: still
+            postMessage({type: "end", arg: undefined}); // reply, since requests
+            return;                         // to this worker are queued (PAR)
+        }
         const VK = X.V_VV_EV_EA_2_VK(V, VV, EV, EA);
         NOTE.annotate(V, "vertices_coords");
         NOTE.annotate(EV, "edges_vertices");
@@ -38,6 +44,14 @@ const actions = {
         NOTE.annotate(FV, "faces_vertices");
         NOTE.annotate(FE, "faces_edges");
         const [Vf, Ff] = X.V_FV_EV_EA_2_Vf_Ff(V, FV, EV, EA);
+        const lost = Vf.filter(p => p == undefined).length;
+        if (lost > 0) {     // not reachable from the first face: cannot fold
+            NOTE.time(`ERROR: ${lost} vertices are not connected to the rest ` +
+                "of the paper (a crease touching no other crease or boundary, " +
+                "or separate pieces of paper?)");
+            postMessage({type: "end", arg: undefined});
+            return;
+        }
         NOTE.annotate(Vf, "vertices_coords_folded");
         NOTE.annotate(Ff, "faces_flip");
         NOTE.lap();
@@ -52,7 +66,11 @@ const actions = {
         const {Vf, EV, EF, FV} = G.FOLD;
         const L = EV.map((P) => M.expand(P, Vf));
         NOTE.time("Constructing points and segments from edges");
-        const [P, SP, SE, eps_i] = X.L_2_V_EV_EL(L);
+        // keep a point wherever a folded edge ends: merging collinear ends away
+        // would list edges that only touch end to end (e.g. at a vertex in the
+        // middle of a straight crease or along the paper's edge) on one shared
+        // segment, as if they overlapped, giving wrong constraints
+        const [P, SP, SE, eps_i] = X.L_2_V_EV_EL(L, true);
         if (P.length == 0) { postMessage([undefined, [], []]); return; }
         const eps = M.min_line_length(L)/(2**eps_i);
         NOTE.time(`Used eps: ${2**eps_i} | ${eps}`);

@@ -4,29 +4,44 @@ import { NOTE } from "./note.js";
 import { AVL } from "./avl.js";
 
 export const X = {     // CONVERSION
-    L_2_V_EV_EL: (L) => {
+    L_2_V_EV_EL: (L, keep_ends = false) => {    // see L_eps_2_V_EV_EL
         const d = M.min_line_length(L);
         const k = 3;    // decrease eps until feature #s repeat sufficiently
         const N = 25;
-        let k_ = 0, i_ = 1, nV = 0, nE = 0, count = 0;
+        let k_ = 0, i_ = 1, nV = 0, nE = 0, nEL = 0, count = 0;
         for (let i = 3; i < (N + 3); ++i) {
             const eps = d/(2**i);
             if (eps < M.FLOAT_EPS) { break; }
-            const [V, EV, EL] = X.L_eps_2_V_EV_EL(L, eps);
-            if (V.length == 0) { nV = nE = count = 0; continue; }
-            count = ((V.length == nV) && (EV.length == nE)) ? (count + 1) : 1;
+            const [V, EV, EL] = X.L_eps_2_V_EV_EL(L, eps, keep_ends);
+            if (V.length == 0) { nV = nE = nEL = count = 0; continue; }
+            // also count which lines lie on which segments: when eps is too
+            // coarse, a line can snap to a nearby point and bend along
+            // another line without changing the numbers of points or
+            // segments, but it then lies on one more segment than it should
+            const n_EL = EL.reduce((n, ls) => n + ls.length, 0);
+            count = ((V.length == nV) && (EV.length == nE) && (n_EL == nEL)) ?
+                (count + 1) : 1;
             nV = V.length;
             nE = EV.length;
+            nEL = n_EL;
             if (count <= k_) { continue; }
             k_ = count; i_ = i;
             if (k_ == k) { break; }
         }
         const eps_i = i_ - k_ + 1;
         const eps = d/(2**eps_i);
-        const [V, EV, EL] = X.L_eps_2_V_EV_EL(L, eps);
+        const [V, EV, EL] = X.L_eps_2_V_EV_EL(L, eps, keep_ends);
         return [V, EV, EL, eps_i];
     },
-    L_eps_2_V_EV_EL: (L, eps) => {
+    L_eps_2_V_EV_EL: (L, eps, keep_ends = false) => {
+        // keep_ends: keep a vertex wherever a line starts or ends. By default
+        // a point where one segment continues straight on is merged away even
+        // if lines start or end there, which joins collinear lines end to end
+        // and extends a line ending in open space to the next point on its
+        // line: the merged segment lists every line on it. Importing .cp,
+        // .svg and .opx files uses that merge; the editor (dangling creases,
+        // partly reassigned lines) and the folded graph (which must know
+        // exactly which edges overlap) need the ends kept.
         const point_comp = ([x1, y1], [x2, y2]) => {    // point comparator
             const dx = x1 - x2;
             const dy = y1 - y2;
@@ -123,7 +138,7 @@ export const X = {     // CONVERSION
                     continue;
                 }
             }
-            if (S1.length == 1) {
+            if ((S1.length == 1) && !keep_ends) {
                 const s0 = S1[0];
                 let all_parallel = true;
                 for (const ll of VL[vi]) {

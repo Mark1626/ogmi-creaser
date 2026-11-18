@@ -237,9 +237,11 @@ export const GUI = {   // INTERFACE
         SVG.clear("export");
         const comp_select = document.getElementById("component_select");
         const state_config = document.getElementById("state_config");
-        state_config.style.display = "none";
+        state_config.hidden = true;
         const c = comp_select.value;
-        comp_select.style.background = "white";
+        // backgroundColor, not the background shorthand, which would also
+        // wipe out the dropdown arrow image XP.css draws on the select
+        comp_select.style.backgroundColor = "white";
         const C = [];
         if (c == "none") {
         } else if (c == "all") {
@@ -249,8 +251,8 @@ export const GUI = {   // INTERFACE
         } else {
             C.push(c);
             const n = Gn[c];
-            comp_select.style.background = GUI.COLORS.rand[c % GUI.COLORS.rand.length];
-            state_config.style.display = "inline";
+            comp_select.style.backgroundColor = GUI.COLORS.rand[c % GUI.COLORS.rand.length];
+            state_config.hidden = false;
             const state_label = document.getElementById("state_label");
             const state_select = document.getElementById("state_select");
             state_label.innerHTML = `${n} State${(n == 1) ? "" : "s"}`;

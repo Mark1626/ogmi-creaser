@@ -2,118 +2,218 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Flat-Folder</title>
+    <title>Ogmi-Creaser</title>
     <link rel="icon" href="./favicon.png">
-    <style>
-        div .border {
-            display: inline-block;
-            padding: 3px;
-            margin: -1px;
-            background-color: lightgray;
-            overflow: hidden;
-            min-height: 22px;
-        }
-    </style>
+    <link rel="stylesheet" href="./lib/xp.css/XP.css">
+    <link rel="stylesheet" href="./style.css">
 </head>
-<body style="background:darkgray">
-    <div style="margin: 3px">
-        <span style="font-family:sans-serif">
-            <b>Flat-Folder&nbsp;&nbsp;</b>
-        </span>
-        <input type="button" id="side" value="+" style="width:25px;"/>
-        <select id="example" style="width:150px"/></select>
-        <input type="file" id="import" style="width:200px"/>
-        <input type="button" id="export_button" value="Export" style="display:none">
-        <div id="export" style="display:inline"></div>
-    </div>
-    <div id="flat_controls" style="display:none">
-        <div class="border">
-            <span style="display:inline-block;width:110px">Crease Pattern</span>
-        </div>
-        <div class="border">
-            <label for="rotate_flat">Rotate</label>
-            <select id="rotate_flat"></select>
-        </div>
-        <div class="border">
-            <label for="flip_flat">Flip</label>
-            <input type="checkbox" id="flip_flat">
-        </div>
-        <div class="border">
-            <label for="text">Text</label>
-            <input type="checkbox" id="text">
-        </div>
-        <div class="border">
-            <label for="limit_select">Limit</label>
-            <select id="limit_select"></select>
-        </div>
-        <div class="border">
-            <input type="button" id="fold_button" value="Fold">
-        </div>
-    </div>
-    <div id="cell_controls" style="display:none">
-        <div class="border">
-            <span style="display:inline-block;width:110px">Folded View</span>
-        </div>
-        <div class="border">
-            <label for="rotate_fold">Rotate</label>
-            <select id="rotate_fold"></select>
-        </div>
-        <div class="border">
-            <label for="flip_fold">Flip</label>
-            <input type="checkbox" id="flip_fold">
-        </div>
-        <div id="fold_controls" style="display:none">
-            <div class="border">
-                <label for="scale">Scale</label>
-                <input type="checkbox" id="scale">
-            </div>
-            <div class="border">
-                <label for="shadow">Shadows</label>
-                <input id="shadow" type="number" min="0" max="6" step="1">
-            </div>
-            <div class="border">
-                <label for="visible">Visible</label>
-                <input type="checkbox" id="visible">
+<body>
+    <div class="window">
+        <div class="title-bar">
+            <div class="title-bar-text">
+                <img src="./favicon.png" alt="">Ogmi-Creaser
             </div>
         </div>
-    </div>
-    <div id="state_controls" style="display:none">
-        <div class="border">
-            <span style="display:inline-block;width:110px">Folded State</span>
-        </div>
-        <div class="border">
-            <label for="component_select">Component</label>
-            <select id="component_select"></select>
-        </div>
-        <div id="state_config" style="display:none">
-            <div class="border">
-                <label for="state_select" id="state_label"></label>
-                <input id="state_select" type="number">
+        <div class="window-body">
+            <div class="controls">
+                <fieldset id="file_controls">
+                    <legend>File</legend>
+                    <div class="row">
+                        <button id="side" class="compact"
+                            title="Which side of the paper faces up when importing">+</button>
+                        <select id="example"></select>
+                        <button id="new_button" title="Start a new 8 × 8 crease pattern">New</button>
+                        <button id="import_button">Open…</button>
+                        <input type="file" id="import" hidden>
+                        <button id="export_button" hidden>Export</button>
+                        <div id="export" class="group"></div>
+                    </div>
+                </fieldset>
+                <fieldset id="edit_controls" hidden>
+                    <legend>Crease Pattern Editor</legend>
+                    <div class="row">
+                        <div class="field-row" role="radiogroup" aria-label="Tool">
+                            <input type="radio" name="edit_mode" id="edit_draw" value="draw" checked>
+                            <label for="edit_draw" title="Draw creases (D)">Draw</label>
+                            <input type="radio" name="edit_mode" id="edit_modify" value="modify">
+                            <label for="edit_modify" title="Change creases to the selected type (M)">Modify</label>
+                            <input type="radio" name="edit_mode" id="edit_erase" value="erase">
+                            <label for="edit_erase" title="Erase creases (E)">Erase</label>
+                            <input type="radio" name="edit_mode" id="edit_move" value="move">
+                            <label for="edit_move" title="Move vertices (V)">Move</label>
+                        </div>
+                        <div class="field-row" role="radiogroup" aria-label="Crease type">
+                            <input type="radio" name="edit_type" id="edit_M" value="M" checked>
+                            <label for="edit_M" title="Mountain (1)"><span class="swatch" data-a="M"></span>Mountain</label>
+                            <input type="radio" name="edit_type" id="edit_V" value="V">
+                            <label for="edit_V" title="Valley (2)"><span class="swatch" data-a="V"></span>Valley</label>
+                            <input type="radio" name="edit_type" id="edit_U" value="U">
+                            <label for="edit_U" title="Unassigned (3)"><span class="swatch" data-a="U"></span>Unassigned</label>
+                            <input type="radio" name="edit_type" id="edit_F" value="F">
+                            <label for="edit_F" title="Flat, not folded (4)"><span class="swatch" data-a="F"></span>Flat</label>
+                            <input type="radio" name="edit_type" id="edit_B" value="B">
+                            <label for="edit_B" title="Boundary (5)"><span class="swatch" data-a="B"></span>Boundary</label>
+                        </div>
+                        <div class="field-row" title="Grid squares across and down, each set on its own. Only the grid changes: the paper and creases stay as they are (cells may become rectangles).">
+                            <label for="edit_width">Grid</label>
+                            <input type="number" id="edit_width" min="1" max="128" step="any" value="8" aria-label="Grid squares across">
+                            <span>×</span>
+                            <input type="number" id="edit_height" min="1" max="128" step="any" value="8" aria-label="Grid squares down">
+                            <button id="edit_fit" title="Find the coarsest grid that puts every vertex on a grid point">Fit grid</button>
+                            <button id="edit_paper" title="Add or remove grid squares at the right and bottom; creases keep their size and place">Resize Paper</button>
+                        </div>
+                        <div class="field-row">
+                            <input type="checkbox" id="edit_show_grid" checked>
+                            <label for="edit_show_grid" title="Show the reference grid (G)">Show grid</label>
+                        </div>
+                        <div class="field-row" title="Pinch or Ctrl/⌘ + scroll to zoom at the pointer; when zoomed in, scroll or Space + drag to pan">
+                            <span>Zoom</span>
+                            <button id="edit_zoom_out" class="compact" title="Zoom out (−)">−</button>
+                            <button id="edit_zoom_reset" class="compact" title="Show the whole paper (0)">100%</button>
+                            <button id="edit_zoom_in" class="compact" title="Zoom in (+)">+</button>
+                        </div>
+                        <div class="field-row">
+                            <span>Transform</span>
+                            <button id="edit_reflect_x" class="compact" title="Reflect left–right">↔</button>
+                            <button id="edit_reflect_y" class="compact" title="Reflect top–bottom">↕</button>
+                            <button id="edit_rotate_ccw" class="compact" title="Rotate 90° counter-clockwise">↺</button>
+                            <button id="edit_rotate_cw" class="compact" title="Rotate 90° clockwise">↻</button>
+                        </div>
+                        <button id="edit_cleanup" title="Remove vertices where a crease continues straight on with the same type">Cleanup</button>
+                        <button id="edit_undo" title="Undo (Ctrl+Z)" disabled>Undo</button>
+                        <button id="edit_redo" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button>
+                        <div class="field-row">
+                            <label for="edit_title">Title</label>
+                            <input type="text" id="edit_title" spellcheck="false">
+                        </div>
+                        <button id="edit_save" title="Download this crease pattern as a .fold file (Ctrl+S)">Save</button>
+                        <button id="edit_svg" title="Download as SVG: red mountain, blue valley, seen from the coloured side">Export SVG</button>
+                        <button id="edit_fold" title="Fold this crease pattern and show the folded state; Edit comes back here (F)">Fold</button>
+                    </div>
+                </fieldset>
+                <fieldset id="flat_controls" hidden>
+                    <legend>Crease Pattern</legend>
+                    <div class="row">
+                        <div class="field-row">
+                            <label for="rotate_flat">Rotate</label>
+                            <select id="rotate_flat"></select>
+                        </div>
+                        <div class="field-row">
+                            <input type="checkbox" id="flip_flat">
+                            <label for="flip_flat">Flip</label>
+                        </div>
+                        <div class="field-row">
+                            <input type="checkbox" id="text">
+                            <label for="text">Text</label>
+                        </div>
+                        <div class="field-row">
+                            <label for="limit_select">Limit</label>
+                            <select id="limit_select"></select>
+                        </div>
+                        <button id="edit_button" title="Edit this crease pattern (E)">Edit</button>
+                        <button id="fold_button" title="Find the folded states (F)">Fold</button>
+                    </div>
+                </fieldset>
+                <fieldset id="cell_controls" hidden>
+                    <legend>Folded View</legend>
+                    <div class="row">
+                        <div class="field-row">
+                            <label for="rotate_fold">Rotate</label>
+                            <select id="rotate_fold"></select>
+                        </div>
+                        <div class="field-row">
+                            <input type="checkbox" id="flip_fold">
+                            <label for="flip_fold">Flip</label>
+                        </div>
+                        <div id="fold_controls" class="group" hidden>
+                            <div class="field-row">
+                                <input type="checkbox" id="scale">
+                                <label for="scale">Scale</label>
+                            </div>
+                            <div class="field-row">
+                                <label for="shadow">Shadows</label>
+                                <input id="shadow" type="number" min="0" max="6" step="1">
+                            </div>
+                            <div class="field-row">
+                                <input type="checkbox" id="visible">
+                                <label for="visible">Visible</label>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+                <fieldset id="state_controls" hidden>
+                    <legend>Folded State</legend>
+                    <div class="row">
+                        <div class="field-row">
+                            <label for="component_select">Component</label>
+                            <select id="component_select"></select>
+                        </div>
+                        <div id="state_config" class="group" hidden>
+                            <div class="field-row">
+                                <label for="state_select" id="state_label"></label>
+                                <input id="state_select" type="number">
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
             </div>
+            <div class="workspace">
+                <div class="panels">
+                    <svg id="main">
+                        <svg id="flat"></svg>
+                        <svg id="cell"></svg>
+                        <svg id="fold"></svg>
+                    </svg>
+                </div>
+                <fieldset id="help_panel" hidden>
+                    <legend>Help</legend>
+                    <table id="help_table"></table>
+                </fieldset>
+            </div>
+            <textarea id="console" rows=10 readonly></textarea>
         </div>
-        <div class="border">
-            <span id="num_states"></span>
+        <div class="status-bar">
+            <p class="status-bar-field" id="file_name">No crease pattern loaded</p>
+            <p class="status-bar-field" id="num_states"></p>
+            <p class="status-bar-field fixed">Ogmi-Creaser by Nimalan (mark1626)</p>
+            <p class="status-bar-field fixed">
+                Fork of <a href="https://github.com/origamimagiro/flat-folder">Flat-Folder</a>
+                by Jason S. Ku
+            </p>
+            <p class="status-bar-field fixed">
+                UI: <a href="https://github.com/botoxparty/XP.css">XP.css</a>
+                by Adam Hammad
+            </p>
+            <p class="status-bar-field fixed">
+                <a href="https://github.com/Mark1626/ogmi-creaser">Code on GitHub</a>
+            </p>
         </div>
     </div>
-    <div>
-        <svg id="main">
-            <svg id="flat"></svg>
-            <svg id="cell"></svg>
-            <svg id="fold"></svg>
-        </svg>
-    </div>
-    <div>
-        <textarea id="console" rows=10 readonly
-        style="width:100%;background-color:darkgray;resize:none;
-        font-family:monospace"></textarea>
-    </div>
-    <div>
-        © Jason S. Ku 2022-2026
-        <a href="https://github.com/origamimagiro/flat-folder">
-            Code on Github
-        </a>
-        <a href="./batch.html" style="float:right">Batch</a>
-    </div>
+    <dialog id="paper_dialog" class="window">
+        <form method="dialog">
+            <div class="title-bar">
+                <div class="title-bar-text">Grid size</div>
+                <div class="title-bar-controls">
+                    <button type="button" id="paper_close" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="window-body">
+                <p>Size in grid squares. Squares are added or removed at
+                    the right and bottom; creases keep their size and place.
+                    Shrinking cuts creases at the new edge.</p>
+                <div class="field-row">
+                    <label for="paper_width">Width</label>
+                    <input type="number" id="paper_width" min="1" max="128" step="1" required>
+                    <label for="paper_height">Height</label>
+                    <input type="number" id="paper_height" min="1" max="128" step="1" required>
+                </div>
+                <div class="field-row dialog_buttons">
+                    <button value="ok">OK</button>
+                    <button value="cancel" formnovalidate>Cancel</button>
+                </div>
+            </div>
+        </form>
+    </dialog>
     <script type="module" src="./src/main.js"></script>
 </body>
 </html>
