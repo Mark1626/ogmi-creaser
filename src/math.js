@@ -132,13 +132,16 @@ export const M = {     // MATH
         const off = M.sub(c, M.div(M.add(p_max, p_min), 2));
         return P.map(p => M.add(p, off));
     },
-    normalize_points: (P) => {
+    normalize_points: (P) => P.map(M.normalizer(P)[0]),
+    normalizer: (P) => {
+        // [f, k]: f maps points as normalize_points maps P (into the unit
+        // square, centred), scaling lengths by k
         const [p_min, p_max] = M.bounding_box(P);
         const [x_diff, y_diff] = M.sub(p_max, p_min);
         const is_tall = (x_diff < y_diff);
         const diff = is_tall ? y_diff : x_diff;
         const off = M.sub([0.5, 0.5], M.div([x_diff, y_diff], 2*diff));
-        return P.map(p => M.add(M.div(M.sub(p, p_min), diff), off));
+        return [(p) => M.add(M.div(M.sub(p, p_min), diff), off), 1/diff];
     },
     interior_point: (P_) => {    // currently O(n^2), could be O(n log n)
         // In:  P | array of 2D points that define a simple polygon with the

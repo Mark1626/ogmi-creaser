@@ -7,6 +7,7 @@ import { GUI } from "./gui.js";
 import { PAR } from "./parallel.js";
 import { EX } from "./examples.js";
 import { EDIT } from "./edit_gui.js";
+import { BP } from "./bp.js";
 
 window.onload = () => MAIN.startup();   // entry point
 
@@ -169,10 +170,14 @@ const MAIN = {
         }
         if (FOLD == undefined) { return MAIN.import_failed(); }
         FOLD.name = name;
+        [FOLD.FL, FOLD.RV] = BP.doc_2_FL_RV(doc, type, side) ?? [];   // circles
         SOURCE = {name, doc, type, side};
         for (const input of ["text", "flip_flat", "flip_fold", "visible", "scale"]) {
             document.getElementById(input).checked = false;
         }
+        document.getElementById("bp_flat").checked = true;
+        document.getElementById("bp_flat_row").hidden = !(FOLD.FL?.length > 0);
+        document.getElementById("bp_flat").onchange = () => GUI.update_flat(FOLD);
         for (const id of ["rotate_flat", "rotate_fold", "shadow"]) {
             document.getElementById(id).value = 0;
         }

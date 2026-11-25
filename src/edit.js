@@ -1,11 +1,13 @@
 import { M } from "./math.js";
 import { X } from "./conversion.js";
 import { IO } from "./io.js";
+import { BP } from "./bp.js";
 
 // Crease pattern editor geometry (no DOM).
 //
 // The editor's crease pattern is a plain object
-// CP = {W, H, GW, GH, tol, V, EV, EA}:
+// CP = {W, H, GW, GH, tol, V, EV, EA}, optionally with the box pleating
+// circles and rivers FL and RV (see BP), which every edit keeps:
 //
 // W, H | page size; the page is [0, W] x [0, H] with x to the right and y
 //      | downward (screen coordinates). A new page is W x H unit squares
@@ -62,7 +64,8 @@ export const ED = {     // EDITOR
         const [V, EV, EA] = out;
         return {W, H, GW, GH, tol, V, EV, EA};
     },
-    rebuild: (CP, L) => ED.W_H_L_2_CP(CP.W, CP.H, L, CP.tol, CP.GW, CP.GH),
+    rebuild: (CP, L) => BP.carry(CP,
+        ED.W_H_L_2_CP(CP.W, CP.H, L, CP.tol, CP.GW, CP.GH)),
     CP_2_L: ({V, EV, EA}) => EV.map(([i, j], e) => [V[i], V[j], EA[e]]),
     W_H_2_L: (W, H) => {        // boundary of rectangular paper filling page
         const C = [[0, 0], [W, 0], [W, H], [0, H]];
@@ -156,8 +159,8 @@ export const ED = {     // EDITOR
         }[op];
         if (T == undefined) { return undefined; }
         const [turn, f] = T;
-        return {...(turn ? {W: H, H: W, GW: GH, GH: GW} : {W, H, GW, GH}),
-            tol, V: V.map(f), EV, EA};
+        return BP.carry(CP, {...(turn ? {W: H, H: W, GW: GH, GH: GW} : {W, H, GW, GH}),
+            tol, V: V.map(f), EV, EA}, f);
     },
     resize: (CP, GW_, GH_) => {
         // Make the grid GW_ x GH_ squares by adding or removing them at the
@@ -186,8 +189,8 @@ export const ED = {     // EDITOR
             const pq = ED.clip([p, q], W_, H_, eps);
             if (pq != undefined) { L.push([...pq, a]); }
         }
-        return ED.W_H_L_2_CP(W_, H_,
-            rect ? L.concat(ED.W_H_2_L(W_, H_)) : L, tol, GW_, GH_);
+        return BP.carry(CP, ED.W_H_L_2_CP(W_, H_,     // circles stay put
+            rect ? L.concat(ED.W_H_2_L(W_, H_)) : L, tol, GW_, GH_));
     },
     grid_2_page: ({W, H, GW, GH}, GW_, GH_) => {   // page size of a grid of
         const f = (n, size, N) => (size == N) ? n : n*size/N;   // GW_ x GH_
@@ -244,8 +247,8 @@ export const ED = {     // EDITOR
             const r = Math.round(y);
             return (Math.abs(y - r) < 1e-9*Math.max(1, Math.abs(y))) ? r : y;
         };
-        return {W: f(W), H: f(H), GW: f(W), GH: f(H), tol,
-            V: V.map(([x, y]) => [f(x), f(y)]), EV, EA};
+        return BP.carry(CP, {W: f(W), H: f(H), GW: f(W), GH: f(H), tol,
+            V: V.map(([x, y]) => [f(x), f(y)]), EV, EA}, (p) => p.map(f), f);
     },
     fit_grid: ({W, H, V}, min = 1, max = 128) => {
         // Smallest N in [min, max] such that, with the page N grid squares
@@ -329,7 +332,7 @@ export const ED = {     // EDITOR
     },
 
     // ---- files
-    CP_2_doc: (CP, title = "creasepattern") => {
+    CP_2_doc: (CP, title = "creasepattern", author = "") => {
         // FOLD text with faces. Faces are wound like ogmi-creaser's own files
         // (first face has positive area), so ogmi-creaser imports this with EA
         // as is; files without faces would get M and V swapped on import.
@@ -338,6 +341,7 @@ export const ED = {     // EDITOR
             file_spec: 1.1,
             file_creator: "ogmi-creaser editor",
             file_title: title,
+            ...((author.trim() != "") ? {file_author: author.trim()} : {}),
             file_classes: ["singleModel"],
             frame_classes: ["creasePattern"],
             vertices_coords: V,
@@ -350,7 +354,17 @@ export const ED = {     // EDITOR
         }
         FOLD["ogmi-creaser:page"] = {width: W, height: H, tolerance: tol,
             grid: [CP.GW, CP.GH]};
+        Object.assign(FOLD, BP.CP_2_fold(CP));      // circles and rivers
         return JSON.stringify(FOLD, undefined, 2);
+    },
+    doc_2_author: (doc, type) => {      // a FOLD file's file_author, or ""
+        if (type != "fold") { return ""; }
+        try {
+            const author = JSON.parse(doc).file_author;
+            return (typeof author == "string") ? author : "";
+        } catch {
+            return "";
+        }
     },
     SVG_COLORS: {       // stroke colours of an exported SVG, per EA
         // EA is in ogmi-creaser's white-side-up convention, so its M is a
@@ -393,25 +407,24 @@ export const ED = {     // EDITOR
         // (holes removed, outer edges marked B, M/V in ogmi-creaser's
         // convention). A file saved by the editor keeps its page and grid;
         // anything else is moved to the origin and scaled onto its own grid
-        // (see fit_grid), or so its longer side spans n grid squares.
+        // (see fit_grid), or so its longer side spans n grid squares. Box
+        // pleating circles and rivers (see BP) move and scale with it.
         const [V, , EV, EA] = IO.doc_type_side_2_V_VV_EV_EA_EF_FV_FE(
             doc, type, side);
         if ((V == undefined) || (V.length == 0)) { return undefined; }
-        let page;
+        let json;
         if (type == "fold") {
-            try {   // files saved before the rename use "flat-folder:page"
-                const json = JSON.parse(doc);
-                page = json["ogmi-creaser:page"] ?? json["flat-folder:page"];
-            } catch {}
-        }
-        let W, H, f;
+            try { json = JSON.parse(doc); } catch {}
+        }   // files saved before the rename use "flat-folder:page"
+        const page = json?.["ogmi-creaser:page"] ?? json?.["flat-folder:page"];
+        let W, H, f, k;     // page size, and the map of points and of lengths
         const size = (x) => Number.isFinite(x) && (x > 0);  // regrid can make
         const has_page = (page != undefined) &&             // fractional sides
             size(page.width) && size(page.height) &&
             V.every(p => ED.in_page(p, page.width, page.height,
                 ED.eps(page.width, page.height, ED.TOLS[0])));
         if (has_page) {
-            [W, H, f] = [page.width, page.height, p => p];
+            [W, H, f, k] = [page.width, page.height, p => p, 1];
         } else {
             const [p_min, p_max] = M.bounding_box(V);
             const [w, h] = M.sub(p_max, p_min);
@@ -420,7 +433,7 @@ export const ED = {     // EDITOR
                 const r = Math.round(d);
                 return Math.max(1, (Math.abs(d - r) < 1e-6) ? r : Math.ceil(d));
             };
-            [W, H, f] = [fit(w*s), fit(h*s), p => M.mul(M.sub(p, p_min), s)];
+            [W, H, f, k] = [fit(w*s), fit(h*s), p => M.mul(M.sub(p, p_min), s), s];
         }
         const L = EV.map(([i, j], e) => [f(V[i]), f(V[j]),
             ED.A.includes(EA[e]) ? EA[e] : "U"]);
@@ -445,6 +458,11 @@ export const ED = {     // EDITOR
             }
         }
         if (CP == undefined) { return undefined; }
+        const flip = side ? (p) => p        // IO turns the vertices over
+            : ([x, y]) => [x, 1 - y];       // like this for the other side
+        const bp = BP.fold_2_FL_RV(json, (p) => f(flip(p)), (d) => d*k,
+            (p) => BP.in_page(CP, p));
+        if (bp != undefined) { CP = {...CP, FL: bp[0], RV: bp[1]}; }
         if (has_page) {     // its own grid (files saved before grids: W x H)
             const G = page.grid;
             return (Array.isArray(G) && size(G[0]) && size(G[1]))

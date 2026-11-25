@@ -4,6 +4,8 @@ import { SVG } from "./svg.js";
 import { GUI } from "./gui.js";
 import { IO } from "./io.js";
 import { ED } from "./edit.js";
+import { BP } from "./bp.js";
+import { BPD } from "./bp_draw.js";
 
 // Crease pattern editor interface. While active (between EDIT.start or
 // EDIT.resume and EDIT.stop) it owns the left panel (#flat): it draws the
@@ -20,6 +22,8 @@ let CP;             // crease pattern being edited (see ED)
 let UNDO = [];      // earlier CPs
 let REDO = [];      // undone CPs
 let TITLE;          // title of the pattern, used for file names
+let AUTHOR = "";    // author of the pattern (FOLD file_author)
+let LAST_AUTHOR = "";   // author typed last, for new patterns
 let HANDED;         // FOLD text last handed to ogmi-creaser by Fold
 let SHOWN;          // CP shown in the middle and right panels, if any
 let ON_FOLD;        // async (file name, FOLD text) => imported and solved?
@@ -35,6 +39,9 @@ let FRAME;          // pending animation frame for a zoom or pan redraw
 let HOVER;          // last pointer position over the panel, client pixels
 let PAN;            // pan drag in progress: last pointer position, pixels
 let SPACE = false;  // Space held over the panel: dragging pans
+let ISSUES;         // [CP, BP.river_issues(CP), BP.river_shapes(CP)] for
+                    // the last CP checked
+let WARNED = "";    // river warnings last logged
 const MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? "");
 const DEFAULT_ZOOM = {z: 1, fx: 0.5, fy: 0.5};
 
@@ -46,7 +53,14 @@ export const EDIT = {
         modify: "Modify (M): click or drag across creases to give them the selected type",
         erase: "Erase (E): click or drag across creases",
         move: "Move (V): drag a vertex; its creases follow",
+        flap: "Circle (C): click for a circle of the set radius, or drag out " +
+            "its radius; drag a centre to move it. It replaces circles it overlaps",
+        river: "River (R): press on a square and drag to paint a river of the " +
+            "set width; it flows round circles. Start on a river to extend it",
+        bp_remove: "Remove (X): click a circle or river",
     },
+    MODES: ["draw", "modify", "erase", "move", "flap", "river", "bp_remove"],
+    BP_MODES: ["flap", "river", "bp_remove"],   // the Box Pleating tools
     // Shortcuts as listed in the Help panel (key_down implements them).
     // Keys: combinations of key names, "Mod" is Ctrl (⌘ on a Mac); "swatch"
     // shows the crease colour; the Mouse group lists tools, not keys.
@@ -56,6 +70,10 @@ export const EDIT = {
             [[["M"]], "Modify creases to the selected type"],
             [[["E"]], "Erase creases"],
             [[["V"]], "Move vertices"]]],
+        ["Box pleating", [
+            [[["C"]], "Add or move circles (flaps)"],
+            [[["R"]], "Paint rivers"],
+            [[["X"]], "Remove circles and rivers"]]],
         ["Crease type", [
             [[["1"]], "Mountain", "M"],
             [[["2"]], "Valley", "V"],
@@ -80,6 +98,11 @@ export const EDIT = {
             ["Draw", "Click two points, or drag"],
             ["Modify, Erase", "Click a crease, or drag across creases"],
             ["Move", "Drag a vertex; its creases follow"],
+            ["Circle", "Click, or drag out the radius; drag a centre to move it. " +
+                "It replaces circles it overlaps"],
+            ["River", "Press on a square and drag to paint; start on a " +
+                "river to extend it"],
+            ["Remove", "Click a circle or river"],
             ["Zoom", MAC ? "Pinch, or ⌘ + scroll" : "Ctrl + scroll"],
             ["Pan", "Scroll when zoomed in, or drag with Space held (or the middle button)"]]],
     ],
@@ -149,6 +172,8 @@ export const EDIT = {
         document.getElementById("edit_fold").onclick = () => EDIT.fold();
         const title = document.getElementById("edit_title");
         title.oninput = () => { TITLE = title.value; };
+        const author = document.getElementById("edit_author");
+        author.oninput = () => { AUTHOR = LAST_AUTHOR = author.value; };
         for (const id of ["edit_width", "edit_height"]) {
             document.getElementById(id).onchange = () => EDIT.regrid(id);
         }
@@ -165,6 +190,12 @@ export const EDIT = {
         document.getElementById("edit_zoom_out").onclick = () => EDIT.zoom(1/EDIT.ZOOM_STEP);
         document.getElementById("edit_zoom_reset").onclick = () => EDIT.zoom_reset();
         document.getElementById("edit_show_grid").onchange = () => {
+            if (EDIT.active()) { EDIT.draw(); }
+        };
+        document.getElementById("bp_show").onchange = (e) => {
+            if (!e.target.checked && EDIT.BP_MODES.includes(EDIT.mode())) {
+                document.getElementById("edit_draw").click();   // hidden: the
+            }                                   // Box Pleating tools would be blind
             if (EDIT.active()) { EDIT.draw(); }
         };
         for (const op of ["reflect_x", "reflect_y", "rotate_ccw", "rotate_cw"]) {
@@ -203,12 +234,17 @@ export const EDIT = {
             NOTE.time("ERROR: could not open this crease pattern in the editor");
             return;
         }
+        const [n, m] = [BP.flaps(CP_).length, BP.rivers(CP_).length];
         EDIT.start(CP_, source.name, `Editing ${source.name} ` +
-            `(${CP_.V.length} vertices, ${CP_.EV.length} edges)`, true);
+            `(${CP_.V.length} vertices, ${CP_.EV.length} edges` +
+            ((n == 0) ? ")" : `, ${EDIT.circles(n)}, ` +
+                `${m} ${(m == 1) ? "river" : "rivers"})`), true,
+            ED.doc_2_author(source.doc, source.type));
     },
-    start: (CP_, title, message, keep) => {     // new session; keep: the
-        EDIT.stop();                            // panels show this pattern
-        [CP, UNDO, REDO, TITLE, HANDED] = [CP_, [], [], title, undefined];
+    start: (CP_, title, message, keep, author = LAST_AUTHOR) => {
+        EDIT.stop();        // new session; keep: the panels show this pattern
+        [CP, UNDO, REDO, TITLE, AUTHOR, HANDED] =
+            [CP_, [], [], title, author, undefined];
         ZOOM = {...DEFAULT_ZOOM};
         SHOWN = keep ? CP_ : undefined;
         EDIT.activate(message, keep);
@@ -226,12 +262,16 @@ export const EDIT = {
         }
         if (!keep) { SHOWN = undefined; }
         document.getElementById("main").classList.add("editing");
-        document.getElementById("edit_controls").hidden = false;
+        for (const id of ["edit_controls", "bp_controls", "meta_controls"]) {
+            document.getElementById(id).hidden = false;
+        }
         document.getElementById("edit_title").value = TITLE;
+        document.getElementById("edit_author").value = AUTHOR;
         document.getElementById("file_name").textContent = `${EDIT.title()} (editing)`;
         document.getElementById("help_panel").hidden = !HELP;
         if (clear_log) { NOTE.clear_log(); }
         NOTE.time(message);
+        WARNED = "";        // list any river warnings again
         ACTIVE = new AbortController();
         const opts = {signal: ACTIVE.signal};
         const flat = document.getElementById("flat");
@@ -259,18 +299,20 @@ export const EDIT = {
         [ACTIVE, GESTURE, HOVER, PAN, SPACE] = [undefined, undefined, undefined, undefined, false];
         if (FRAME != undefined) { cancelAnimationFrame(FRAME); }
         FRAME = undefined;
-        document.getElementById("edit_controls").hidden = true;
+        for (const id of ["edit_controls", "bp_controls", "meta_controls"]) {
+            document.getElementById(id).hidden = true;
+        }
         document.getElementById("help_panel").hidden = true;
         const flat = document.getElementById("flat");
-        flat.classList.remove("editing", "edit_draw", "edit_modify", "edit_erase",
-            "edit_move", "edit_pan", "edit_panning");
+        flat.classList.remove("editing", ...EDIT.MODES.map(m => `edit_${m}`),
+            "edit_pan", "edit_panning");
         SVG.clear("flat");
         document.getElementById("main").classList.remove("editing");
         for (const id of ["cell", "fold"]) { document.getElementById(id).style.opacity = ""; }
     },
     fold: async () => {     // import into ogmi-creaser and solve
         if (!EDIT.active()) { return; }
-        HANDED = ED.CP_2_doc(CP, EDIT.title());
+        HANDED = ED.CP_2_doc(CP, EDIT.title(), AUTHOR);
         SHOWN = CP;
         let ok;
         try {
@@ -287,7 +329,7 @@ export const EDIT = {
     },
     save: () => {
         if (!EDIT.active()) { return; }
-        IO.download(new Blob([ED.CP_2_doc(CP, EDIT.title())],
+        IO.download(new Blob([ED.CP_2_doc(CP, EDIT.title(), AUTHOR)],
             {type: "application/json"}), `${EDIT.title()}.fold`);
         NOTE.time(`Saved ${EDIT.title()}.fold`);
     },
@@ -297,6 +339,9 @@ export const EDIT = {
             {type: "image/svg+xml"}), `${EDIT.title()}.svg`);
         NOTE.time(`Exported ${EDIT.title()}.svg (red mountain, blue valley, ` +
             "seen from the coloured side)");
+        if (BP.flaps(CP).length > 0) {
+            NOTE.time("(circles and rivers are not in the SVG; Save keeps them)");
+        }
     },
     transform: (op) => {
         if (EDIT.active()) { EDIT.apply(ED.transform(CP, op)); }
@@ -410,6 +455,7 @@ export const EDIT = {
         document.getElementById("edit_undo").disabled = (UNDO.length == 0);
         document.getElementById("edit_redo").disabled = (REDO.length == 0);
         EDIT.draw();
+        EDIT.log_warnings();
     },
     cancel: () => {
         GESTURE = undefined;
@@ -440,12 +486,15 @@ export const EDIT = {
         const {W, H, V, EV, EA} = CP;
         VIEW = EDIT.view();
         const G = {};
-        for (const id of ["catch", "faces", "grid", "edges", "marks", "overlay", "minimap"]) {
+        for (const id of ["catch", "faces", "grid", "bp", "edges", "bp_dots", "marks",
+            "overlay", "minimap"]) {
             G[id] = SVG.append("g", flat, {id: `edit_${id}`});
         }
         const box = flat.viewBox.baseVal;   // whole panel receives pointer input
         SVG.append("rect", G.catch, {x: box.x, y: box.y, width: box.width,
             height: box.height, fill: "transparent"});
+        const clip = SVG.append("clipPath", G.catch, {id: "edit_page_clip"});
+        SVG.append("rect", clip, BPD.rect(EDIT.pen(), [0, 0, W, H]));  // the page
         if (FACES?.[0] !== CP) { FACES = [CP, ...ED.CP_2_FV_VK(CP)]; }
         const [, FV, VK] = FACES;
         const P = V.map(VIEW.to_panel);
@@ -472,6 +521,7 @@ export const EDIT = {
                 EDIT.draw_line(G.grid, VIEW.to_panel([0, y]), VIEW.to_panel([W, y]), style);
             }
         }
+        EDIT.draw_bp(G.bp, G.bp_dots);
         EDIT.show_size();
         document.getElementById("edit_zoom_reset").textContent =
             `${Math.round(ZOOM.z*100)}%`;
@@ -646,6 +696,8 @@ export const EDIT = {
                     "vector-effect": "non-scaling-stroke"});
             }
             EDIT.update_status(GESTURE?.to ?? p);
+        } else if (EDIT.BP_MODES.includes(EDIT.mode())) {
+            EDIT.draw_bp_overlay(g, p);
         } else {
             const E = new Set(GESTURE?.E ?? []);
             if ((p != undefined) && !GESTURE?.down) {     // hover
@@ -667,20 +719,245 @@ export const EDIT = {
     },
     update_mode: () => {
         const flat = document.getElementById("flat");
-        flat.classList.remove("edit_draw", "edit_modify", "edit_erase", "edit_move");
+        flat.classList.remove(...EDIT.MODES.map(m => `edit_${m}`));
         flat.classList.add("editing", `edit_${EDIT.mode()}`);
-        if (VIEW != undefined) { EDIT.draw_overlay(); }
+        const show = document.getElementById("bp_show");
+        const redraw = EDIT.BP_MODES.includes(EDIT.mode()) && !show.checked;
+        if (redraw) { show.checked = true; }    // its tools need them shown
+        if ((VIEW == undefined) || !EDIT.active()) { return; }
+        redraw ? EDIT.draw() : EDIT.draw_overlay();
     },
-    update_status: (p) => {
+    update_status: (p, note) => {
         const parts = [EDIT.HINT[EDIT.mode()]];
         if (p != undefined) {   // in grid squares from the top left
             const f = (x) => String(Math.round(x*1000)/1000);
             parts.push(`(${f(p[0]*CP.GW/CP.W)}, ${f(p[1]*CP.GH/CP.H)})`);
         }
+        if (note != undefined) { parts.push(note); }
         parts.push((BAD == 0) ? "all vertices locally flat-foldable"
             : `${BAD} ${(BAD == 1) ? "vertex" : "vertices"} not locally flat-foldable`);
+        const warn = EDIT.issues().filter(m => m != undefined);
+        if (warn.length == 1) {
+            parts.push(`warning: a river ${warn[0]}`);
+        } else if (warn.length > 1) {
+            parts.push(`warning: ${warn.length} rivers break the river rules (see the log)`);
+        }
         if (EDIT.outdated()) { parts.push("folded view is out of date: press Fold"); }
         document.getElementById("num_states").textContent = parts.join(" · ");
+    },
+
+    // ---- box pleating circles and rivers (see BP, drawn by BPD)
+    // Under the creases and cut off at the page edge, except the circles'
+    // centres, which are drawn whole over the creases (flaps often sit on an
+    // edge or corner). They live in the CP, so undo covers them, and Save
+    // writes them to the .fold file. Rivers breaking BP's rules are drawn as
+    // warnings, counted in the status bar and listed in the log.
+    on_page: (g) => SVG.append("g", g, {"clip-path": "url(#edit_page_clip)"}),
+    pen: () => ({at: VIEW.to_panel, len: (d) => d*SVG.SCALE/VIEW.s}),
+    issues: () => {         // BP.river_issues for the current CP, cached
+        if (ISSUES?.[0] !== CP) {
+            ISSUES = [CP, BP.river_issues(CP), BP.river_shapes(CP)];
+        }
+        return ISSUES[1];
+    },
+    shapes: () => {         // BP.river_shapes for the current CP, cached
+        EDIT.issues();
+        return ISSUES[2];
+    },
+    warnings: () => {       // sentences for the log
+        const RV = BP.rivers(CP);
+        return EDIT.issues().flatMap((issue, k) => (issue == undefined) ? []
+            : [`the river of ${EDIT.squares(RV[k].length)} ${issue}`]);
+    },
+    log_warnings: () => {   // when they change
+        const W = EDIT.warnings();
+        const key = W.join("\n");
+        if (key == WARNED) { return; }
+        if (W.length == 0) {
+            NOTE.time("Rivers: no warnings");
+        } else {
+            for (const w of W) { NOTE.time(`Warning: ${w} (a river must be ` +
+                "one unbroken band from the paper edge to the paper edge)"); }
+        }
+        WARNED = key;
+    },
+    bp_length: (id, report = true) => {     // a size field, in page units
+        const n = Number(document.getElementById(id).value);
+        if (Number.isFinite(n) && (n > 0)) { return n*BP.unit(CP); }
+        if (report) {
+            NOTE.time(`${(id == "bp_radius") ? "Radius" : "River width"} ` +
+                "must be a positive number of grid squares");
+        }
+        return undefined;
+    },
+    bp_squares: (d) => EDIT.fmt(d/BP.unit(CP)),     // page units, in squares
+    brush_width: (report = true) => {   // River width: whole squares, >= 1
+        const n = Math.round(Number(document.getElementById("bp_width").value));
+        if (Number.isFinite(n) && (n >= 1)) { return n; }
+        if (report) { NOTE.time("River width must be at least 1 grid square"); }
+        return undefined;
+    },
+    circles: (n) => `${n} ${(n == 1) ? "circle" : "circles"}`,
+    squares: (n) => `${n} ${(n == 1) ? "square" : "squares"}`,
+    apply_flap: (gone, CP_, what) => {  // gone: circles the edit replaces
+        if (EDIT.apply(CP_) && (gone.length > 0)) {
+            NOTE.time(`The ${what} circle replaced ${EDIT.circles(gone.length)} ` +
+                `it overlapped (Undo brings ${(gone.length == 1) ? "it" : "them"} back)`);
+        }
+    },
+    draw_bp: (g, dots) => {     // dots: centres, drawn over the creases
+        if (!document.getElementById("bp_show").checked) { return; }
+        BPD.design(EDIT.on_page(g), dots, EDIT.pen(), CP, EDIT.issues(), EDIT.shapes());
+    },
+    draw_bp_overlay: (g, p) => {    // pointer feedback for the Box Pleating tools
+        const mode = EDIT.mode();
+        const C = BPD.COLORS;
+        const pen = EDIT.pen();
+        const FL = BP.flaps(CP);
+        const dashed = {"stroke-dasharray": "6 4"};
+        const dots = g;                 // not cut off at the paper
+        g = EDIT.on_page(g);
+        const glow = (i) => SVG.append("rect", g, {
+            ...BPD.rect(pen, BP.square(FL[i], FL[i][2])),
+            fill: GUI.COLORS.active, "fill-opacity": 0.35, stroke: GUI.COLORS.active,
+            "stroke-width": 6, "stroke-opacity": 0.8, ...BPD.LINE});
+        let note;
+        if (mode == "flap") {
+            const moving = GESTURE?.i;
+            const hover = ((GESTURE == undefined) && (p != undefined))
+                ? BP.pick_centre(CP, p, EDIT.pick_radius()) : -1;
+            let flap;           // [x, y, r] of the circle a release would place
+            if (moving != undefined) {
+                flap = [...GESTURE.to, FL[moving][2]];
+            } else if (hover >= 0) {
+                glow(hover);    // pressing here moves it
+            } else {
+                const centre = GESTURE?.centre ??
+                    ((p == undefined) ? undefined : ED.snap(CP, p));
+                const r = GESTURE?.r ?? EDIT.bp_length("bp_radius", false);
+                if ((centre != undefined) && (r != undefined)) {
+                    flap = [...centre, r];
+                    note = `radius ${EDIT.bp_squares(r)}`;
+                }
+            }
+            if (flap != undefined) {    // and the circles it would replace
+                const gone = BP.overlaps(CP, flap, flap[2], moving ?? -1);
+                for (const i of gone) {
+                    SVG.append("rect", g, {...BPD.rect(pen, BP.square(FL[i], FL[i][2])),
+                        fill: C.replaced, "fill-opacity": 0.3, stroke: C.replaced,
+                        "stroke-width": 2, "stroke-dasharray": "4 3", ...BPD.LINE});
+                }
+                BPD.flap(g, dots, pen, flap, C.flap, dashed);
+                if (gone.length > 0) {
+                    note = [note, `replaces ${EDIT.circles(gone.length)} it ` +
+                        "overlaps"].filter(s => s != undefined).join(" · ");
+                }
+            }
+            EDIT.update_status(GESTURE?.to ?? GESTURE?.centre ?? p, note);
+        } else if (mode == "river") {
+            const w = GESTURE?.w ?? EDIT.brush_width(false);
+            if (GESTURE != undefined) {     // the river as painted so far
+                const CP_ = BP.paint(CP, GESTURE.k, [...GESTURE.S.values()]);
+                const k = (GESTURE.k < 0) ? BP.rivers(CP_ ?? CP).length - 1 : GESTURE.k;
+                const issue = (CP_ == undefined) ? undefined : BP.river_issues(CP_)[k];
+                if (CP_ != undefined) {
+                    BPD.river(g, pen, BP.river_shapes(CP_)[k], issue != undefined, true);
+                }
+                const n = (CP_ == undefined) ? 0
+                    : BP.rivers(CP_)[k].length - ((GESTURE.k < 0) ? 0 : BP.rivers(CP)[k].length);
+                note = `${(GESTURE.k < 0) ? "new river" : "extending a river"}: ` +
+                    `${EDIT.squares(n)} painted` +
+                    ((issue == undefined) ? "" : ` · warning: the river ${issue}`);
+            } else if ((p != undefined) && (w != undefined)) {  // the brush
+                const k = BP.river_at(CP, p);
+                if (k >= 0) {           // pressing here extends this river
+                    BPD.outline(g, pen, BP.rivers(CP)[k], {stroke: GUI.COLORS.active,
+                        "stroke-width": 6, "stroke-opacity": 0.8});
+                }
+                BPD.outline(g, pen, BP.stroke(CP, p, p, w), {stroke: "#000",
+                    "stroke-width": 1, ...dashed});
+                note = `brush ${EDIT.squares(w)}` + ((k >= 0) ? " · extends this river" : "");
+            }
+            EDIT.update_status(p, note);
+        } else {
+            const hit = GESTURE?.hit ?? ((p == undefined) ? undefined : BP.pick(CP, p));
+            if (hit?.flap != undefined) {
+                glow(hit.flap);
+            } else if (hit?.river != undefined) {
+                BPD.river(g, pen, EDIT.shapes()[hit.river], false, true,
+                    GUI.COLORS.active);
+            }
+            EDIT.update_status(p);
+        }
+    },
+    bp_down: (p) => {
+        const mode = EDIT.mode();
+        if (mode == "flap") {           // drag a centre, or start a new circle
+            const i = BP.pick_centre(CP, p, EDIT.pick_radius());
+            GESTURE = (i >= 0) ? {i, to: BP.flaps(CP)[i].slice(0, 2), down: true}
+                : {centre: ED.snap(CP, p), down: true};
+        } else if (mode == "river") {   // paint, from the square under p
+            const w = EDIT.brush_width();
+            GESTURE = (w == undefined) ? undefined : {w, k: BP.river_at(CP, p),
+                last: p, S: new Map(), down: true};
+            EDIT.paint(p);
+        } else {
+            GESTURE = {hit: BP.pick(CP, p), down: true};
+        }
+    },
+    bp_move: (p) => {
+        if (!GESTURE?.down) { return; }
+        const mode = EDIT.mode();
+        if ((mode == "flap") && (GESTURE.i != undefined)) {
+            GESTURE.to = ED.snap(CP, p);
+        } else if (mode == "flap") {    // dragging out a radius, whole squares
+            const [x, y] = GESTURE.centre;
+            const u = BP.unit(CP);
+            const n = Math.round(Math.max(Math.abs(p[0] - x), Math.abs(p[1] - y))/u);
+            if ((n >= 1) || (GESTURE.r != undefined)) { GESTURE.r = Math.max(n, 1)*u; }
+        } else if (mode == "river") {
+            EDIT.paint(p);
+        }
+    },
+    paint: (p) => {     // the River brush moves to p: collect its squares
+        if (GESTURE?.S == undefined) { return; }
+        for (const s of BP.stroke(CP, GESTURE.last, p, GESTURE.w)) {
+            GESTURE.S.set(BP.key(s), s);
+        }
+        GESTURE.last = p;
+    },
+    bp_up: (p) => {
+        const G_ = GESTURE;
+        GESTURE = undefined;
+        const mode = EDIT.mode();
+        if ((mode == "flap") && (G_.i != undefined)) {
+            const [x, y, r] = BP.flaps(CP)[G_.i];
+            if (M.dist(G_.to, [x, y]) > 0) {
+                EDIT.apply_flap(BP.overlaps(CP, G_.to, r, G_.i),
+                    BP.move_flap(CP, G_.i, G_.to), "moved");
+            }
+        } else if (mode == "flap") {
+            const r = G_.r ?? EDIT.bp_length("bp_radius");
+            if (r == undefined) { return; }
+            if (G_.r != undefined) {    // a dragged radius becomes the set one
+                document.getElementById("bp_radius").value = EDIT.bp_squares(r);
+            }
+            EDIT.apply_flap(BP.overlaps(CP, G_.centre, r),
+                BP.add_flap(CP, G_.centre, r), "new");
+        } else if (mode == "river") {
+            const CP_ = BP.paint(CP, G_.k, [...G_.S.values()]);
+            if (CP_ == undefined) {
+                NOTE.time("River: nothing painted (squares under circles and " +
+                    "other rivers are left as they are)");
+            } else {
+                EDIT.apply(CP_);
+            }
+        } else if ((G_.hit != undefined) && (p != undefined)) {
+            const hit = BP.pick(CP, p);         // released over what was pressed
+            if ((hit?.flap !== G_.hit.flap) || (hit?.river !== G_.hit.river)) { return; }
+            EDIT.apply((hit.flap != undefined) ? BP.remove_flap(CP, hit.flap)
+                : BP.remove_river(CP, hit.river));
+        }
     },
 
     // ---- pointer and keyboard input
@@ -717,6 +994,8 @@ export const EDIT = {
         } else if (EDIT.mode() == "move") {
             const v = ED.pick_vertex(CP, p, EDIT.pick_radius());
             GESTURE = (v < 0) ? undefined : {v, to: CP.V[v], down: true};
+        } else if (EDIT.BP_MODES.includes(EDIT.mode())) {
+            EDIT.bp_down(p);
         } else {
             const e0 = ED.pick_edge(CP, p, EDIT.pick_radius());
             GESTURE = {E: new Set((e0 < 0) ? [] : [e0]), last: p, down: true};
@@ -742,6 +1021,8 @@ export const EDIT = {
             }
         } else if (EDIT.mode() == "move") {
             if (GESTURE?.down) { GESTURE.to = ED.snap(CP, p, GESTURE.v); }
+        } else if (EDIT.BP_MODES.includes(EDIT.mode())) {
+            EDIT.bp_move(p);
         } else if (GESTURE?.down) {     // painting across creases
             for (const e of ED.edges_crossed(CP, GESTURE.last, p)) {
                 GESTURE.E.add(e);
@@ -764,6 +1045,8 @@ export const EDIT = {
             const {v, to} = GESTURE;
             GESTURE = undefined;
             if (M.dist(to, CP.V[v]) > 0) { EDIT.apply(ED.move_vertex(CP, v, to)); }
+        } else if (EDIT.BP_MODES.includes(EDIT.mode())) {
+            EDIT.bp_up(p);
         } else {
             const E = Array.from(GESTURE.E);
             GESTURE = undefined;
@@ -800,7 +1083,8 @@ export const EDIT = {
             e.preventDefault();         // instead of saving the web page
             EDIT.save();
         } else if (!mod && !e.altKey) {
-            const tool = {d: "draw", m: "modify", e: "erase", v: "move"}[key];
+            const tool = {d: "draw", m: "modify", e: "erase", v: "move",
+                c: "flap", r: "river", x: "bp_remove"}[key];
             const type = {1: "M", 2: "V", 3: "U", 4: "F", 5: "B"}[e.key];
             if (tool != undefined) {
                 document.getElementById(`edit_${tool}`).click();

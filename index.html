@@ -82,13 +82,47 @@
                         <button id="edit_cleanup" title="Remove vertices where a crease continues straight on with the same type">Cleanup</button>
                         <button id="edit_undo" title="Undo (Ctrl+Z)" disabled>Undo</button>
                         <button id="edit_redo" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button>
+                        <button id="edit_svg" title="Download as SVG: red mountain, blue valley, seen from the coloured side">Export SVG</button>
+                        <button id="edit_fold" title="Fold this crease pattern and show the folded state; Edit comes back here (F)">Fold</button>
+                    </div>
+                </fieldset>
+                <fieldset id="bp_controls" hidden>
+                    <legend>Box Pleating</legend>
+                    <div class="row">
+                        <div class="field-row" role="radiogroup" aria-label="Box pleating tool">
+                            <input type="radio" name="edit_mode" id="edit_flap" value="flap">
+                            <label for="edit_flap" title="Add circles (flaps): click for the set radius, or drag out the radius; drag a centre to move it. A circle replaces any it overlaps (C)">Circle</label>
+                            <input type="radio" name="edit_mode" id="edit_river" value="river">
+                            <label for="edit_river" title="Paint rivers: press on a square and drag; the river follows the cursor at the set width and flows round circles. Start on a river to extend it (R)">River</label>
+                            <input type="radio" name="edit_mode" id="edit_bp_remove" value="bp_remove">
+                            <label for="edit_bp_remove" title="Remove circles and rivers (X)">Remove</label>
+                        </div>
+                        <div class="field-row" title="Radius of new circles, in grid squares (dragging out a circle sets it too)">
+                            <label for="bp_radius">Radius</label>
+                            <input type="number" id="bp_radius" min="1" step="any" value="2">
+                        </div>
+                        <div class="field-row" title="Width of the River brush, in whole grid squares">
+                            <label for="bp_width">River width</label>
+                            <input type="number" id="bp_width" min="1" step="1" value="1">
+                        </div>
                         <div class="field-row">
+                            <input type="checkbox" id="bp_show" checked>
+                            <label for="bp_show" title="Show circles and rivers">Show</label>
+                        </div>
+                    </div>
+                </fieldset>
+                <fieldset id="meta_controls" hidden>
+                    <legend>Metadata</legend>
+                    <div class="row">
+                        <div class="field-row" title="Saved as the file's title (file_title); also names the saved file">
                             <label for="edit_title">Title</label>
                             <input type="text" id="edit_title" spellcheck="false">
                         </div>
+                        <div class="field-row" title="Saved as the file's author (file_author)">
+                            <label for="edit_author">Author</label>
+                            <input type="text" id="edit_author" spellcheck="false">
+                        </div>
                         <button id="edit_save" title="Download this crease pattern as a .fold file (Ctrl+S)">Save</button>
-                        <button id="edit_svg" title="Download as SVG: red mountain, blue valley, seen from the coloured side">Export SVG</button>
-                        <button id="edit_fold" title="Fold this crease pattern and show the folded state; Edit comes back here (F)">Fold</button>
                     </div>
                 </fieldset>
                 <fieldset id="flat_controls" hidden>
@@ -105,6 +139,10 @@
                         <div class="field-row">
                             <input type="checkbox" id="text">
                             <label for="text">Text</label>
+                        </div>
+                        <div class="field-row" id="bp_flat_row" hidden>
+                            <input type="checkbox" id="bp_flat" checked>
+                            <label for="bp_flat" title="Show the design's box pleating circles and rivers">Circles</label>
                         </div>
                         <div class="field-row">
                             <label for="limit_select">Limit</label>

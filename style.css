@@ -72,15 +72,16 @@ input[type=number] {
 }
 
 /* Crease pattern editor */
-#edit_controls input[type=radio] + label {
+#edit_controls input[type=radio] + label,
+#bp_controls input[type=radio] + label {
     margin-right: 10px; /* XP draws each radio left of its label: keep the */
 }                       /* next option's circle off this label's text */
 
-#edit_title {
+#edit_title, #edit_author {
     width: 16em;
 }
 
-#edit_width, #edit_height, #paper_width, #paper_height {
+#edit_width, #edit_height, #paper_width, #paper_height, #bp_radius, #bp_width {
     width: 4.5em;
 }
 
@@ -206,6 +207,14 @@ dialog.window::backdrop {
 
 #flat.edit_move {
     cursor: move;
+}
+
+#flat.edit_flap, #flat.edit_river {
+    cursor: crosshair;
+}
+
+#flat.edit_bp_remove {
+    cursor: pointer;
 }
 
 /* Zoomed-in overview (EDIT.draw_minimap): the pointer passes through to the
