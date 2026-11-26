@@ -3,6 +3,8 @@ import { NOTE } from "./note.js";
 import { X } from "./conversion.js";
 import { SVG } from "./svg.js";
 import { PAR } from "./parallel.js";
+import { BP } from "./bp.js";
+import { BPD } from "./bp_draw.js";
 
 export const GUI = {   // INTERFACE
     WIDTH: 1,
@@ -71,14 +73,15 @@ export const GUI = {   // INTERFACE
         const V_ = GUI.transform_points(V, "flat");
         const F = FV.map(f => M.expand(f, V_));
         const G = {};
-        for (const id of ["f", "fnotes", "vis",
-            "check", "e_flat", "e_folded", "text", "enotes", "cons", "click",
+        for (const id of ["f", "fnotes", "vis", "bp",
+            "check", "e_flat", "e_folded", "bp_dots", "text", "enotes", "cons", "click",
         ]) {
             G[id] = SVG.append("g", svg, {id: `flat_${id}`});
         }
         const flip = document.getElementById("flip_flat").checked;
         SVG.draw_polygons(G.f, F, {id: true, fill: (
             GUI.COLORS.face[flip ? "top" : "bottom"])});
+        GUI.draw_bp(G.bp, G.bp_dots, FOLD, F);
         const K = [];
         const eps = 1/M.EPS;
         for (const [i, k] of VK.entries()) {
@@ -120,6 +123,28 @@ export const GUI = {   // INTERFACE
         SVG.draw_polygons(G.click, F, {id: true, opacity: 0,
             fill: GUI.COLORS.active});
         GUI.update_text(FOLD);
+    },
+    draw_bp: (g, dots, FOLD, F) => {
+        // The design's box pleating circles and rivers (FOLD.FL, FOLD.RV, in
+        // the file's coordinates; see BP), placed as transform_points places
+        // the vertices and cut off at the paper (the faces F)
+        const {V, FL, RV} = FOLD;
+        if ((FL == undefined) || (FL.length == 0) ||
+            !document.getElementById("bp_flat").checked) { return; }
+        for (const el of [g, dots]) { el.setAttribute("opacity", BPD.FADED); }
+        const [f, k] = M.normalizer(V);
+        const pen = {
+            at: (p) => M.mul(GUI.transform_points([f(p)], "flat", false)[0], SVG.SCALE),
+            len: (d) => d*k*SVG.SCALE,
+        };
+        const clip = SVG.append("clipPath", g, {id: "flat_bp_clip"});
+        for (const P of F) {
+            SVG.append("polygon", clip, {points: P.map(p => M.mul(p, SVG.SCALE).join(",")).join(" ")});
+        }
+        const paper = M.bounding_box(V).flat();     // for the river rules
+        const CP = {FL, RV, W: paper[2] - paper[0], H: paper[3] - paper[1]};
+        BPD.design(SVG.append("g", g, {"clip-path": "url(#flat_bp_clip)"}), dots,
+            pen, CP, BP.river_issues(CP, paper), BP.river_shapes(CP, paper));
     },
     update_visible: (FOLD, CELL) => {
         SVG.clear("flat_vis");
