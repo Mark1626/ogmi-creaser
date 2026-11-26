@@ -12,3 +12,7 @@ I'm a newbie designer so I thought it useful to have flat folder available durin
 
 1. [Jason S. Ku](http://jasonku.mit.edu/) and his [Flat-Folder](https://origamimagiro.github.io/flat-folder/)
 2. [XP.css](https://github.com/botoxparty/XP.css) by [botoxparty](https://github.com/botoxparty)
+
+## Roadmap
+
+1. Add support for 22.5 deg

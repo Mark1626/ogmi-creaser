@@ -131,6 +131,7 @@ export const GUI = {   // INTERFACE
         const {V, FL, RV} = FOLD;
         if ((FL == undefined) || (FL.length == 0) ||
             !document.getElementById("bp_flat").checked) { return; }
+        for (const el of [g, dots]) { el.setAttribute("opacity", BPD.FADED); }
         const [f, k] = M.normalizer(V);
         const pen = {
             at: (p) => M.mul(GUI.transform_points([f(p)], "flat", false)[0], SVG.SCALE),

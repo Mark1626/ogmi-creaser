@@ -15,6 +15,7 @@ export const BPD = {
     COLORS: {flap: "#8E44AD", river: "#138D75", replaced: "#C0392B",
         warning: "#E67E22"},
     LINE: {"vector-effect": "non-scaling-stroke"},
+    FADED: 0.4,     // opacity in the folded view, where the creases come first
     rect: (pen, [x1, y1, x2, y2]) => {      // a square -> <rect> attributes
         const [[a, b], [c, d]] = [[x1, y1], [x2, y2]].map(pen.at);
         return {x: Math.min(a, c), y: Math.min(b, d),
